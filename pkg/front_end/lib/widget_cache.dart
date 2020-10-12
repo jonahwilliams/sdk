@@ -128,9 +128,10 @@ class WidgetCache {
 
     if (classHierarchy.isSubclassOf(newClass, _statelessWidget) ||
         classHierarchy.isSubclassOf(newClass, _statefulWidget)) {
-      if (_hasSubClasses(newClass, partialComponent, classHierarchy)) {
-        return null;
-      }
+        if (classHierarchy.isExtended(newClass) ||
+            classHierarchy.isUsedAsMixin(newClass)) {
+          return null;
+        }
       return newClass.name;
     }
 
@@ -150,8 +151,8 @@ class WidgetCache {
         if (statefulWidgetType.name == _statefulWidgetClassName) {
           return null;
         }
-        if (_hasSubClasses(
-            statefulWidgetType, partialComponent, classHierarchy)) {
+        if (classHierarchy.isExtended(statefulWidgetType) ||
+            classHierarchy.isUsedAsMixin(statefulWidgetType)) {
           return null;
         }
         return statefulWidgetType.name;
@@ -159,22 +160,6 @@ class WidgetCache {
     }
 
     return null;
-  }
-
-  /// Checks whether the class [node] has any subclasses.
-  bool _hasSubClasses(
-      Class node, Component component, ClassHierarchy classHierarchy) {
-    for (Library library in component.libraries) {
-      for (Class otherClass in library.classes) {
-        if (identical(otherClass, node)) {
-          continue;
-        }
-        if (classHierarchy.isSubclassOf(otherClass, node)) {
-          return true;
-        }
-      }
-    }
-    return false;
   }
 
   // Locate the that fully contains the edit range, or null.

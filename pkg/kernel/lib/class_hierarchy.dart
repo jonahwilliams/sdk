@@ -164,6 +164,10 @@ abstract class ClassHierarchy implements ClassHierarchyBase {
   /// mixin application (i.e. [Class.mixedInType]).
   bool isUsedAsMixin(Class class_);
 
+  /// True if there is another class which inherits from this class with
+  /// `extends`.
+  bool isExtended(Class class_);
+
   /// Invokes [callback] for every member declared in or inherited by [class_]
   /// that overrides or implements a member in a supertype of [class_]
   /// (or in rare cases, overrides a member declared in [class_]).
@@ -545,6 +549,11 @@ class ClosedWorldClassHierarchy implements ClassHierarchy {
   @override
   bool isUsedAsMixin(Class class_) {
     return infoFor(class_).directMixers.isNotEmpty;
+  }
+
+  @override
+  bool isExtended(Class class_) {
+    return infoFor(class_).directExtenders.isNotEmpty;
   }
 
   List<_ClassInfo> _getRankedSuperclassInfos(_ClassInfo info) {
