@@ -6,7 +6,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:frontend_server/src/javascript_bundle.dart';
-import 'package:frontend_server/src/strong_components.dart';
 import 'package:kernel/ast.dart';
 import 'package:kernel/class_hierarchy.dart';
 import 'package:kernel/core_types.dart';
@@ -95,25 +94,29 @@ void main() {
       ],
     );
     final testComponent = Component(libraries: [library, ...testCoreLibraries]);
-    final strongComponents =
-        StrongComponents(testComponent, {}, Uri.file('/c.dart'));
-    strongComponents.computeModules();
-    final javaScriptBundler = JavaScriptBundler(
-        testComponent, strongComponents, multiRootScheme, packageConfig);
+
+    final javaScriptBundler = IncrementalJavaScriptBundler(
+      null,
+      {},
+      multiRootScheme,
+    );
     final manifestSink = _MemorySink();
     final codeSink = _MemorySink();
     final sourcemapSink = _MemorySink();
     final metadataSink = _MemorySink();
     final coreTypes = CoreTypes(testComponent);
 
+    await javaScriptBundler.initialize(testComponent, Uri.file('/c.dart'));
+
     final compilers = await javaScriptBundler.compile(
-        ClassHierarchy(testComponent, coreTypes),
-        coreTypes,
-        {},
-        codeSink,
-        manifestSink,
-        sourcemapSink,
-        metadataSink);
+      ClassHierarchy(testComponent, coreTypes),
+      coreTypes,
+      packageConfig,
+      codeSink,
+      manifestSink,
+      sourcemapSink,
+      metadataSink,
+    );
 
     final Map manifest = json.decode(utf8.decode(manifestSink.buffer));
     final String code = utf8.decode(codeSink.buffer);
@@ -146,18 +149,31 @@ void main() {
     );
 
     final testComponent = Component(libraries: [library, ...testCoreLibraries]);
-    final strongComponents = StrongComponents(testComponent, {}, fileUri);
-    strongComponents.computeModules();
-    final javaScriptBundler = JavaScriptBundler(
-        testComponent, strongComponents, multiRootScheme, packageConfig);
+
+    final javaScriptBundler = IncrementalJavaScriptBundler(
+      null,
+      {},
+      multiRootScheme,
+    );
+
+    await javaScriptBundler.initialize(
+        testComponent, Uri.parse('package:a/a.dart'));
+
     final manifestSink = _MemorySink();
     final codeSink = _MemorySink();
     final sourcemapSink = _MemorySink();
     final metadataSink = _MemorySink();
     final coreTypes = CoreTypes(testComponent);
 
-    await javaScriptBundler.compile(ClassHierarchy(testComponent, coreTypes),
-        coreTypes, {}, codeSink, manifestSink, sourcemapSink, metadataSink);
+    await javaScriptBundler.compile(
+      ClassHierarchy(testComponent, coreTypes),
+      coreTypes,
+      packageConfig,
+      codeSink,
+      manifestSink,
+      sourcemapSink,
+      metadataSink,
+    );
 
     final Map manifest = json.decode(utf8.decode(manifestSink.buffer));
     final String code = utf8.decode(codeSink.buffer);
@@ -187,18 +203,30 @@ void main() {
     );
 
     final testComponent = Component(libraries: [library, ...testCoreLibraries]);
-    final strongComponents = StrongComponents(testComponent, {}, fileUri);
-    strongComponents.computeModules();
-    final javaScriptBundler = JavaScriptBundler(
-        testComponent, strongComponents, multiRootScheme, packageConfig);
+
+    final javaScriptBundler = IncrementalJavaScriptBundler(
+      null,
+      {},
+      multiRootScheme,
+    );
+
+    await javaScriptBundler.initialize(testComponent, importUri);
+
     final manifestSink = _MemorySink();
     final codeSink = _MemorySink();
     final sourcemapSink = _MemorySink();
     final metadataSink = _MemorySink();
     final coreTypes = CoreTypes(testComponent);
 
-    await javaScriptBundler.compile(ClassHierarchy(testComponent, coreTypes),
-        coreTypes, {}, codeSink, manifestSink, sourcemapSink, metadataSink);
+    await javaScriptBundler.compile(
+      ClassHierarchy(testComponent, coreTypes),
+      coreTypes,
+      packageConfig,
+      codeSink,
+      manifestSink,
+      sourcemapSink,
+      metadataSink,
+    );
 
     final Map manifest = json.decode(utf8.decode(manifestSink.buffer));
     final String code = utf8.decode(codeSink.buffer);
@@ -215,7 +243,7 @@ void main() {
     expect(code, contains('sourceMappingURL=main.dart.lib.js.map'));
   });
 
-  test('can combine strongly connected components', () {
+  test('can combine strongly connected components', () async {
     // Create three libraries A, B, C where A is the entrypoint and B & C
     // circularly import each other.
     final libraryC = Library(Uri.file('/c.dart'), fileUri: Uri.file('/c.dart'));
@@ -236,19 +264,29 @@ void main() {
     final testComponent = Component(
         libraries: [libraryA, libraryB, libraryC, ...testCoreLibraries]);
 
-    final strongComponents =
-        StrongComponents(testComponent, {}, Uri.file('/a.dart'));
-    strongComponents.computeModules();
-    final javaScriptBundler = JavaScriptBundler(
-        testComponent, strongComponents, multiRootScheme, packageConfig);
+    final javaScriptBundler = IncrementalJavaScriptBundler(
+      null,
+      {},
+      multiRootScheme,
+    );
+
+    await javaScriptBundler.initialize(testComponent, Uri.file('/a.dart'));
+
     final manifestSink = _MemorySink();
     final codeSink = _MemorySink();
     final sourcemapSink = _MemorySink();
     final metadataSink = _MemorySink();
     final coreTypes = CoreTypes(testComponent);
 
-    javaScriptBundler.compile(ClassHierarchy(testComponent, coreTypes),
-        coreTypes, {}, codeSink, manifestSink, sourcemapSink, metadataSink);
+    await javaScriptBundler.compile(
+      ClassHierarchy(testComponent, coreTypes),
+      coreTypes,
+      packageConfig,
+      codeSink,
+      manifestSink,
+      sourcemapSink,
+      metadataSink,
+    );
 
     final code = utf8.decode(codeSink.buffer);
     final manifest = json.decode(utf8.decode(manifestSink.buffer));
@@ -274,6 +312,177 @@ void main() {
 
     // verify source maps are pointing at correct source files.
     expect(sourcemapModuleA['file'], 'a.dart.lib.js');
+  });
+
+  test('can invalidate changes to strongly connected components', () async {
+    // Create three libraries A, B, C where A is the entrypoint and B & C
+    // circularly import each other.
+    final libraryC = Library(Uri.file('/c.dart'), fileUri: Uri.file('/c.dart'));
+    final libraryB = Library(Uri.file('/b.dart'), fileUri: Uri.file('/b.dart'));
+    libraryC.dependencies.add(LibraryDependency.import(libraryB));
+    libraryB.dependencies.add(LibraryDependency.import(libraryC));
+    final libraryA = Library(
+      Uri.file('/a.dart'),
+      fileUri: Uri.file('/a.dart'),
+      dependencies: [
+        LibraryDependency.import(libraryB),
+      ],
+      procedures: [
+        Procedure(Name('ArbitrarilyChosen'), ProcedureKind.Method,
+            FunctionNode(Block([])))
+      ],
+    );
+    final testComponent = Component(
+        libraries: [libraryA, libraryB, libraryC, ...testCoreLibraries]);
+
+    final javaScriptBundler = IncrementalJavaScriptBundler(
+      null,
+      {},
+      multiRootScheme,
+    );
+
+    await javaScriptBundler.initialize(testComponent, Uri.file('/a.dart'));
+
+    // Now change A and B so that they no longer import eachother.
+    final libraryC2 =
+        Library(Uri.file('/c.dart'), fileUri: Uri.file('/c.dart'));
+    final libraryB2 =
+        Library(Uri.file('/b.dart'), fileUri: Uri.file('/b.dart'));
+    libraryB2.dependencies.add(LibraryDependency.import(libraryC2));
+    final libraryA2 = Library(
+      Uri.file('/a.dart'),
+      fileUri: Uri.file('/a.dart'),
+      dependencies: [
+        LibraryDependency.import(libraryB2),
+      ],
+      procedures: [
+        Procedure(Name('ArbitrarilyChosen'), ProcedureKind.Method,
+            FunctionNode(Block([])))
+      ],
+    );
+    final partialComponent =
+        Component(libraries: [libraryA2, libraryB2, libraryC2]);
+
+    await javaScriptBundler.invalidate(
+        partialComponent, testComponent, Uri.file('/a.dart'));
+
+    final manifestSink = _MemorySink();
+    final codeSink = _MemorySink();
+    final sourcemapSink = _MemorySink();
+    final metadataSink = _MemorySink();
+    final coreTypes = CoreTypes(testComponent);
+
+    await javaScriptBundler.compile(
+      ClassHierarchy(testComponent, coreTypes),
+      coreTypes,
+      packageConfig,
+      codeSink,
+      manifestSink,
+      sourcemapSink,
+      metadataSink,
+    );
+
+    final code = utf8.decode(codeSink.buffer);
+    final manifest = json.decode(utf8.decode(manifestSink.buffer));
+
+    // There should be 3 modules since A, B, C are now compiled separately
+    final moduleHeader = r"define(['dart_sdk'], (function load__";
+    expect(moduleHeader.allMatches(code), hasLength(3));
+
+    // Expected module headers.
+    final aModuleHeader =
+        r"define(['dart_sdk'], (function load__a_dart(dart_sdk) {";
+    expect(code, contains(aModuleHeader));
+    final bModuleHeader =
+        r"define(['dart_sdk'], (function load__b_dart(dart_sdk) {";
+    expect(code, contains(bModuleHeader));
+    final cModuleHeader =
+        r"define(['dart_sdk'], (function load__c_dart(dart_sdk) {";
+    expect(code, contains(cModuleHeader));
+    // verify source map url is correct.
+    expect(code, contains('sourceMappingURL=a.dart.lib.js.map'));
+
+    final offsets = manifest['/a.dart.lib.js']['sourcemap'];
+    final sourcemapModuleA = json.decode(
+        utf8.decode(sourcemapSink.buffer.sublist(offsets.first, offsets.last)));
+
+    // verify source maps are pointing at correct source files.
+    expect(sourcemapModuleA['file'], 'a.dart.lib.js');
+  });
+
+  test('can compile using the new invaidation strategy', () async {
+    // Given 3 libraries A -> B -> C
+    final libraryC = Library(
+      Uri.file('/c.dart'),
+      fileUri: Uri.file('/c.dart'),
+      procedures: [
+        Procedure(Name('CheckForContents'), ProcedureKind.Method,
+            FunctionNode(Block([])))
+      ],
+    );
+    final libraryB = Library(Uri.file('/b.dart'), fileUri: Uri.file('/b.dart'));
+    libraryB.dependencies.add(LibraryDependency.import(libraryC));
+    final libraryA = Library(
+      Uri.file('/a.dart'),
+      fileUri: Uri.file('/a.dart'),
+      dependencies: [
+        LibraryDependency.import(libraryB),
+      ],
+      procedures: [
+        Procedure(Name('ArbitrarilyChosen'), ProcedureKind.Method,
+            FunctionNode(Block([])))
+      ],
+    );
+    final testComponent = Component(
+        libraries: [libraryA, libraryB, libraryC, ...testCoreLibraries]);
+
+    final javaScriptBundler = IncrementalJavaScriptBundler(
+      null,
+      {},
+      multiRootScheme,
+    );
+
+    await javaScriptBundler.initialize(testComponent, Uri.file('/a.dart'));
+
+    // Create a new component that only contains C.
+    final libraryC2 = Library(
+      Uri.file('/c.dart'),
+      fileUri: Uri.file('/c.dart'),
+      procedures: [
+        Procedure(Name('AlternativeContents'), ProcedureKind.Method,
+            FunctionNode(Block([])))
+      ],
+    );
+
+    final partialComponent = Component(libraries: [libraryC2]);
+
+    await javaScriptBundler.invalidate(
+        partialComponent, testComponent, Uri.file('/a.dart'));
+
+    final manifestSink = _MemorySink();
+    final codeSink = _MemorySink();
+    final sourcemapSink = _MemorySink();
+    final metadataSink = _MemorySink();
+    final coreTypes = CoreTypes(testComponent);
+
+    await javaScriptBundler.compile(
+      ClassHierarchy(testComponent, coreTypes),
+      coreTypes,
+      packageConfig,
+      codeSink,
+      manifestSink,
+      sourcemapSink,
+      metadataSink,
+    );
+
+    final code = utf8.decode(codeSink.buffer);
+
+    // There should be only a single module.
+    final moduleHeader = r"define(['dart_sdk'], (function load__";
+    expect(moduleHeader.allMatches(code), hasLength(1));
+
+    // C source code should be updated.
+    expect(code, contains('AlternativeContents'));
   });
 }
 

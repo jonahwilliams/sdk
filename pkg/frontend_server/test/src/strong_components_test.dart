@@ -56,6 +56,52 @@ void main() {
     });
   });
 
+  test('no circular imports with patch', () {
+    final libraryA = Library(
+      Uri.file('/a.dart'),
+      fileUri: Uri.file('/a.dart'),
+    );
+    final libraryB = Library(
+      Uri.file('/b.dart'),
+      fileUri: Uri.file('/b.dart'),
+      dependencies: [
+        LibraryDependency.import(libraryA),
+      ],
+    );
+    final libraryC = Library(
+      Uri.file('/c.dart'),
+      fileUri: Uri.file('/c.dart'),
+      dependencies: [
+        LibraryDependency.import(libraryB),
+      ],
+    );
+    final patchedA = Library(
+      Uri.file('/a.dart'),
+      fileUri: Uri.file('/a.dart'),
+    );
+    final testComponent = Component(libraries: [
+      libraryA,
+      libraryB,
+      libraryC,
+    ]);
+    final StrongComponents strongComponents =
+        StrongComponents(testComponent, {}, Uri.file('/c.dart'));
+    strongComponents.computeModules({
+       Uri.file('/a.dart'): patchedA
+    });
+
+    expect(strongComponents.modules, {
+      Uri.file('/a.dart'): [patchedA],
+      Uri.file('/b.dart'): [libraryB],
+      Uri.file('/c.dart'): [libraryC],
+    });
+    expect(strongComponents.moduleAssignment, {
+      Uri.file('/a.dart'): Uri.file('/a.dart'),
+      Uri.file('/b.dart'): Uri.file('/b.dart'),
+      Uri.file('/c.dart'): Uri.file('/c.dart'),
+    });
+  });
+
   test('circular imports are combined into single module', () {
     final libraryA = Library(
       Uri.file('/a.dart'),

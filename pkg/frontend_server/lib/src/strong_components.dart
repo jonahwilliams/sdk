@@ -58,15 +58,18 @@ class StrongComponents {
 
   /// Compute the strongly connected components for the current program.
   ///
+  /// Allows providing a set of libraries to replace what is defined in the component
+  /// via [patchComponent]. When traversing the import graph, instead of loading
+  /// the library defined in a [LibraryDependency], if present the library in
+  /// the patch component will replace it.
+  ///
   /// Throws an [Exception] if [mainUri] cannot be located in the given
   /// component.
-  Future<void> computeModules() async {
+  Future<void> computeModules([Map<Uri, Library> patchComponent]) async {
     assert(modules.isEmpty);
     if (component.libraries.isEmpty) {
       return;
     }
-    // If we don't have a file uri, just use the first library in the
-    // component.
     Library entrypoint = component.libraries.firstWhere(
         (Library library) =>
             library.fileUri == mainUri || library.importUri == mainUri,
@@ -76,8 +79,8 @@ class StrongComponents {
       throw Exception('Could not find entrypoint ${mainUri} in Component.');
     }
 
-    final List<List<Library>> results =
-        computeStrongComponents(_LibraryGraph(entrypoint, loadedLibraries));
+    final List<List<Library>> results = computeStrongComponents(
+        _LibraryGraph(entrypoint, loadedLibraries, patchComponent));
     for (List<Library> component in results) {
       assert(component.length > 0);
       final Uri moduleUri = component
@@ -93,8 +96,9 @@ class StrongComponents {
 }
 
 class _LibraryGraph implements Graph<Library> {
-  _LibraryGraph(this.library, this.loadedLibraries);
+  _LibraryGraph(this.library, this.loadedLibraries, [this._patchComponent]);
 
+  final Map<Uri, Library> _patchComponent;
   final Library library;
   final Set<Library> loadedLibraries;
 
@@ -104,7 +108,10 @@ class _LibraryGraph implements Graph<Library> {
       for (LibraryDependency dependency in vertex.dependencies)
         if (!loadedLibraries.contains(dependency.targetLibrary) &&
             dependency.targetLibrary.importUri.scheme != 'dart')
-          dependency.targetLibrary
+          _patchComponent == null
+              ? dependency.targetLibrary
+              : _patchComponent[dependency.targetLibrary.importUri] ??
+                  dependency.targetLibrary,
     ];
   }
 

@@ -341,7 +341,7 @@ class FrontendCompiler implements CompilerInterface {
   ArgResults _options;
 
   IncrementalCompiler _generator;
-  JavaScriptBundler _bundler;
+  IncrementalJavaScriptBundler _bundler;
 
   WidgetCache _widgetCache;
 
@@ -546,7 +546,7 @@ class FrontendCompiler implements CompilerInterface {
       transformer?.transform(results.component);
 
       if (_compilerOptions.target.name == 'dartdevc') {
-        await writeJavascriptBundle(results, _kernelBinaryFilename,
+        await writeJavascriptBundle(results, true, _kernelBinaryFilename,
             options['filesystem-scheme'], options['dartdevc-module-format']);
       }
       await writeDillFile(results, _kernelBinaryFilename,
@@ -604,17 +604,36 @@ class FrontendCompiler implements CompilerInterface {
     previouslyReportedDependencies = uris;
   }
 
+  StrongComponents _previousComponents;
+
   /// Write a JavaScript bundle containg the provided component.
-  Future<void> writeJavascriptBundle(KernelCompilationResults results,
-      String filename, String fileSystemScheme, String moduleFormat) async {
+  Future<void> writeJavascriptBundle(
+    KernelCompilationResults results,
+    bool fullComponent,
+    String filename,
+    String fileSystemScheme,
+    String moduleFormat,
+  ) async {
     var packageConfig = await loadPackageConfigUri(
         _compilerOptions.packagesFileUri ?? File('.packages').absolute.uri);
     var soundNullSafety = _compilerOptions.nnbdMode == NnbdMode.Strong;
     final Component component = results.component;
-    // Compute strongly connected components.
-    final strongComponents = StrongComponents(component,
-        results.loadedLibraries, _mainSource, _compilerOptions.fileSystem);
-    await strongComponents.computeModules();
+
+    _bundler ??= IncrementalJavaScriptBundler(
+      _compilerOptions.fileSystem,
+      results.loadedLibraries,
+      fileSystemScheme,
+      useDebuggerModuleNames: useDebuggerModuleNames,
+      emitDebugMetadata: emitDebugMetadata,
+      moduleFormat: moduleFormat,
+      soundNullSafety: soundNullSafety,
+    );
+    if (fullComponent) {
+      await _bundler.initialize(component, _mainSource);
+    } else {
+      await _bundler.invalidate(
+          component, _generator.lastKnownGoodComponent, _mainSource);
+    }
 
     // Create JavaScript bundler.
     final File sourceFile = File('$filename.sources');
@@ -624,25 +643,20 @@ class FrontendCompiler implements CompilerInterface {
     if (!sourceFile.parent.existsSync()) {
       sourceFile.parent.createSync(recursive: true);
     }
-    _bundler = JavaScriptBundler(
-        component, strongComponents, fileSystemScheme, packageConfig,
-        useDebuggerModuleNames: useDebuggerModuleNames,
-        emitDebugMetadata: emitDebugMetadata,
-        moduleFormat: moduleFormat,
-        soundNullSafety: soundNullSafety);
     final sourceFileSink = sourceFile.openWrite();
     final manifestFileSink = manifestFile.openWrite();
     final sourceMapsFileSink = sourceMapsFile.openWrite();
     final metadataFileSink =
         emitDebugMetadata ? metadataFile.openWrite() : null;
     final kernel2JsCompilers = await _bundler.compile(
-        results.classHierarchy,
-        results.coreTypes,
-        results.loadedLibraries,
-        sourceFileSink,
-        manifestFileSink,
-        sourceMapsFileSink,
-        metadataFileSink);
+      results.classHierarchy,
+      results.coreTypes,
+      packageConfig,
+      sourceFileSink,
+      manifestFileSink,
+      sourceMapsFileSink,
+      metadataFileSink,
+    );
     cachedProgramCompilers.addAll(kernel2JsCompilers);
     await Future.wait([
       sourceFileSink.close(),
@@ -771,7 +785,7 @@ class FrontendCompiler implements CompilerInterface {
         deltaProgram.uriToSource.keys);
 
     if (_compilerOptions.target.name == 'dartdevc') {
-      await writeJavascriptBundle(results, _kernelBinaryFilename,
+      await writeJavascriptBundle(results, false, _kernelBinaryFilename,
           _options['filesystem-scheme'], _options['dartdevc-module-format']);
     } else {
       await writeDillFile(results, _kernelBinaryFilename,
